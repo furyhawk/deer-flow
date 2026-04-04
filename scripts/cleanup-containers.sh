@@ -2,7 +2,7 @@
 #
 # cleanup-containers.sh - Clean up DeerFlow sandbox containers
 #
-# This script cleans up both Docker and Apple Container runtime containers
+# This script cleans up both Podman and Apple Container runtime containers
 # to ensure compatibility across different container runtimes.
 #
 
@@ -18,24 +18,24 @@ NC='\033[0m' # No Color
 
 echo "Cleaning up sandbox containers with prefix: ${PREFIX}"
 
-# Function to clean up Docker containers
-cleanup_docker() {
-    if command -v docker &> /dev/null; then
-        echo -n "Checking Docker containers... "
-        DOCKER_CONTAINERS=$(docker ps -q --filter "name=${PREFIX}" 2>/dev/null || echo "")
+# Function to clean up Podman containers
+cleanup_podman() {
+    if command -v podman &> /dev/null; then
+        echo -n "Checking Podman containers... "
+        PODMAN_CONTAINERS=$(podman ps -q --filter "name=${PREFIX}" 2>/dev/null || echo "")
 
-        if [ -n "$DOCKER_CONTAINERS" ]; then
+        if [ -n "$PODMAN_CONTAINERS" ]; then
             echo ""
-            echo "Found Docker containers to clean up:"
-            docker ps --filter "name=${PREFIX}" --format "table {{.ID}}\t{{.Names}}\t{{.Status}}"
-            echo "Stopping Docker containers..."
-            echo "$DOCKER_CONTAINERS" | xargs docker stop 2>/dev/null || true
-            echo -e "${GREEN}✓ Docker containers stopped${NC}"
+            echo "Found Podman containers to clean up:"
+            podman ps --filter "name=${PREFIX}" --format "table {{.ID}}\t{{.Names}}\t{{.Status}}"
+            echo "Stopping Podman containers..."
+            echo "$PODMAN_CONTAINERS" | xargs podman stop 2>/dev/null || true
+            echo -e "${GREEN}✓ Podman containers stopped${NC}"
         else
             echo -e "${GREEN}none found${NC}"
         fi
     else
-        echo "Docker not found, skipping..."
+        echo "Podman not found, skipping..."
     fi
 }
 
@@ -89,7 +89,7 @@ except:
 }
 
 # Clean up both runtimes
-cleanup_docker
+cleanup_podman
 cleanup_apple_container
 
 echo -e "${GREEN}✓ Container cleanup complete${NC}"

@@ -12,8 +12,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DOCKER_DIR="$PROJECT_ROOT/docker"
 
-# Docker Compose command with project name
-COMPOSE_CMD="docker compose -p deer-flow-dev -f docker-compose-dev.yaml"
+if command -v podman >/dev/null 2>&1 && podman compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(podman compose -p deer-flow-dev -f docker-compose-dev.yaml)
+elif command -v podman-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(podman-compose -p deer-flow-dev -f docker-compose-dev.yaml)
+else
+    echo -e "${YELLOW}✗ Podman compose is not available.${NC}"
+    echo "Install Podman with compose support or podman-compose, then retry."
+    exit 1
+fi
 
 detect_sandbox_mode() {
     local config_file="$PROJECT_ROOT/config.yaml"
@@ -70,14 +77,14 @@ cleanup() {
 # Set up trap for Ctrl+C
 trap cleanup INT TERM
 
-docker_available() {
-    # Check that the docker CLI exists
-    if ! command -v docker >/dev/null 2>&1; then
+podman_available() {
+    # Check that the podman CLI exists
+    if ! command -v podman >/dev/null 2>&1; then
         return 1
     fi
 
-    # Check that the Docker daemon is reachable
-    if ! docker info >/dev/null 2>&1; then
+    # Check that the Podman service is reachable
+    if ! podman info >/dev/null 2>&1; then
         return 1
     fi
 
@@ -99,28 +106,28 @@ init() {
 
     # Skip image pull for local sandbox mode (no container image needed)
     if [ "$sandbox_mode" = "local" ]; then
-        echo -e "${GREEN}Detected local sandbox mode — no Docker image required.${NC}"
+        echo -e "${GREEN}Detected local sandbox mode — no container image required.${NC}"
         echo ""
 
-        if docker_available; then
-            echo -e "${GREEN}✓ Docker environment is ready.${NC}"
+        if podman_available; then
+            echo -e "${GREEN}✓ Podman environment is ready.${NC}"
             echo ""
-            echo -e "${YELLOW}Next step: make docker-start${NC}"
+            echo -e "${YELLOW}Next step: make podman-start${NC}"
         else
-            echo -e "${YELLOW}Docker does not appear to be installed, or the Docker daemon is not reachable.${NC}"
-            echo "Local sandbox mode itself does not require Docker, but Docker-based workflows (e.g., docker-start) will fail until Docker is available."
+            echo -e "${YELLOW}Podman does not appear to be installed, or the Podman service is not reachable.${NC}"
+            echo "Local sandbox mode itself does not require Podman, but Podman-based workflows (e.g., podman-start) will fail until Podman is available."
             echo ""
-            echo -e "${YELLOW}Install and start Docker, then run: make docker-init && make docker-start${NC}"
+            echo -e "${YELLOW}Install and start Podman, then run: make podman-init && make podman-start${NC}"
         fi
 
         return 0
     fi
 
-    if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^${SANDBOX_IMAGE}$"; then
+    if ! podman images --format '{{.Repository}}:{{.Tag}}' | grep -q "^${SANDBOX_IMAGE}$"; then
         echo -e "${BLUE}Pulling sandbox image: $SANDBOX_IMAGE ...${NC}"
         echo ""
 
-        if ! docker pull "$SANDBOX_IMAGE" 2>&1; then
+        if ! podman pull "$SANDBOX_IMAGE" 2>&1; then
             echo ""
             echo -e "${YELLOW}⚠ Failed to pull sandbox image.${NC}"
             echo ""
@@ -129,12 +136,12 @@ init() {
             echo "  2. You are behind a corporate proxy or firewall"
             echo "  3. The registry requires authentication"
             echo ""
-            echo -e "${GREEN}The Docker development environment can still be started.${NC}"
+            echo -e "${GREEN}The Podman development environment can still be started.${NC}"
             echo "If you need AIO sandbox (container-based execution):"
             echo "  - Ensure you have network access to the registry"
             echo "  - Or configure a custom sandbox image in config.yaml"
             echo ""
-            echo -e "${YELLOW}Next step: make docker-start${NC}"
+            echo -e "${YELLOW}Next step: make podman-start${NC}"
             return 0
         fi
     else
@@ -144,16 +151,16 @@ init() {
     echo ""
     echo -e "${GREEN}✓ Sandbox image is ready.${NC}"
     echo ""
-    echo -e "${YELLOW}Next step: make docker-start${NC}"
+    echo -e "${YELLOW}Next step: make podman-start${NC}"
 }
 
-# Start Docker development environment
+# Start Podman development environment
 start() {
     local sandbox_mode
     local services
 
     echo "=========================================="
-    echo "  Starting DeerFlow Docker Development"
+    echo "  Starting DeerFlow Podman Development"
     echo "=========================================="
     echo ""
 
@@ -192,7 +199,7 @@ start() {
             echo -e "${YELLOW}============================================================${NC}"
             echo ""
             echo -e "${YELLOW}  Edit the file:  $PROJECT_ROOT/config.yaml${NC}"
-            echo -e "${YELLOW}  Then run:        make docker-start${NC}"
+            echo -e "${YELLOW}  Then run:        make podman-start${NC}"
             echo ""
             exit 0
         else
@@ -202,7 +209,7 @@ start() {
     fi
 
     # Ensure extensions_config.json exists as a file before mounting.
-    # Docker creates a directory when bind-mounting a non-existent host path.
+    # Podman creates a directory when bind-mounting a non-existent host path.
     if [ ! -f "$PROJECT_ROOT/extensions_config.json" ]; then
         if [ -f "$PROJECT_ROOT/extensions_config.example.json" ]; then
             cp "$PROJECT_ROOT/extensions_config.example.json" "$PROJECT_ROOT/extensions_config.json"
@@ -213,23 +220,34 @@ start() {
         fi
     fi
 
+    # Use podman socket for DooD by default when available.
+    if [ -z "$DEER_FLOW_DOCKER_SOCKET" ]; then
+        local podman_socket
+        podman_socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+        if [ -S "$podman_socket" ]; then
+            export DEER_FLOW_DOCKER_SOCKET="$podman_socket"
+        else
+            export DEER_FLOW_DOCKER_SOCKET="/var/run/docker.sock"
+        fi
+    fi
+
     echo "Building and starting containers..."
-    cd "$DOCKER_DIR" && $COMPOSE_CMD up --build -d --remove-orphans $services
+    cd "$DOCKER_DIR" && "${COMPOSE_CMD[@]}" up --build -d --remove-orphans $services
     echo ""
     echo "=========================================="
-    echo "  DeerFlow Docker is starting!"
+    echo "  DeerFlow Podman is starting!"
     echo "=========================================="
     echo ""
     echo "  🌐 Application: http://localhost:2026"
     echo "  📡 API Gateway: http://localhost:2026/api/*"
     echo "  🤖 LangGraph:   http://localhost:2026/api/langgraph/*"
     echo ""
-    echo "  📋 View logs: make docker-logs"
-    echo "  🛑 Stop:      make docker-stop"
+    echo "  📋 View logs: make podman-logs"
+    echo "  🛑 Stop:      make podman-stop"
     echo ""
 }
 
-# View Docker development logs
+# View Podman development logs
 logs() {
     local service=""
     
@@ -260,55 +278,63 @@ logs() {
             ;;
     esac
     
-    cd "$DOCKER_DIR" && $COMPOSE_CMD logs -f $service
+    cd "$DOCKER_DIR" && "${COMPOSE_CMD[@]}" logs -f $service
 }
 
-# Stop Docker development environment
+# Stop Podman development environment
 stop() {
     # DEER_FLOW_ROOT is referenced in docker-compose-dev.yaml; set it before
     # running compose down to suppress "variable is not set" warnings.
     if [ -z "$DEER_FLOW_ROOT" ]; then
         export DEER_FLOW_ROOT="$PROJECT_ROOT"
     fi
-    echo "Stopping Docker development services..."
-    cd "$DOCKER_DIR" && $COMPOSE_CMD down
+    if [ -z "$DEER_FLOW_DOCKER_SOCKET" ]; then
+        local podman_socket
+        podman_socket="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+        if [ -S "$podman_socket" ]; then
+            export DEER_FLOW_DOCKER_SOCKET="$podman_socket"
+        fi
+    fi
+
+    echo "Stopping Podman development services..."
+    cd "$DOCKER_DIR" && "${COMPOSE_CMD[@]}" down
     echo "Cleaning up sandbox containers..."
     "$SCRIPT_DIR/cleanup-containers.sh" deer-flow-sandbox 2>/dev/null || true
-    echo -e "${GREEN}✓ Docker services stopped${NC}"
+    echo -e "${GREEN}✓ Podman services stopped${NC}"
 }
 
-# Restart Docker development environment
+# Restart Podman development environment
 restart() {
     echo "========================================"
-    echo "  Restarting DeerFlow Docker Services"
+    echo "  Restarting DeerFlow Podman Services"
     echo "========================================"
     echo ""
     echo -e "${BLUE}Restarting containers...${NC}"
-    cd "$DOCKER_DIR" && $COMPOSE_CMD restart
+    cd "$DOCKER_DIR" && "${COMPOSE_CMD[@]}" restart
     echo ""
-    echo -e "${GREEN}✓ Docker services restarted${NC}"
+    echo -e "${GREEN}✓ Podman services restarted${NC}"
     echo ""
     echo "  🌐 Application: http://localhost:2026"
-    echo "  📋 View logs: make docker-logs"
+    echo "  📋 View logs: make podman-logs"
     echo ""
 }
 
 # Show help
 help() {
-    echo "DeerFlow Docker Management Script"
+    echo "DeerFlow Podman Management Script"
     echo ""
     echo "Usage: $0 <command> [options]"
     echo ""
     echo "Commands:"
     echo "  init          - Pull the sandbox image (speeds up first Pod startup)"
-    echo "  start         - Start Docker services (auto-detects sandbox mode from config.yaml)"
-    echo "  restart       - Restart all running Docker services"
-    echo "  logs [option] - View Docker development logs"
+    echo "  start         - Start Podman services (auto-detects sandbox mode from config.yaml)"
+    echo "  restart       - Restart all running Podman services"
+    echo "  logs [option] - View Podman development logs"
     echo "                  --frontend   View frontend logs only"
     echo "                  --gateway    View gateway logs only"
     echo "                  --nginx      View nginx logs only"
     echo "                  --provisioner View provisioner logs only"
-    echo "  stop          - Stop Docker development services"
+    echo "  stop          - Stop Podman development services"
     echo "  help          - Show this help message"
     echo ""
 }

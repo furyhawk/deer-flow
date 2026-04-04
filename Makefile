@@ -1,6 +1,6 @@
 # DeerFlow - Unified Development Environment
 
-.PHONY: help config config-upgrade check install dev dev-daemon start stop up down clean docker-init docker-start docker-stop docker-logs docker-logs-frontend docker-logs-gateway
+.PHONY: help config config-upgrade check install dev dev-daemon start stop up down clean podman-init podman-start podman-stop podman-logs podman-logs-frontend podman-logs-gateway docker-init docker-start docker-stop docker-logs docker-logs-frontend docker-logs-gateway
 
 BASH ?= bash
 
@@ -25,17 +25,19 @@ help:
 	@echo "  make stop            - Stop all running services"
 	@echo "  make clean           - Clean up processes and temporary files"
 	@echo ""
-	@echo "Docker Production Commands:"
-	@echo "  make up              - Build and start production Docker services (localhost:2026)"
-	@echo "  make down            - Stop and remove production Docker containers"
+	@echo "Podman Production Commands:"
+	@echo "  make up              - Build and start production Podman services (localhost:2026)"
+	@echo "  make down            - Stop and remove production Podman containers"
 	@echo ""
-	@echo "Docker Development Commands:"
-	@echo "  make docker-init     - Pull the sandbox image"
-	@echo "  make docker-start    - Start Docker services (mode-aware from config.yaml, localhost:2026)"
-	@echo "  make docker-stop     - Stop Docker development services"
-	@echo "  make docker-logs     - View Docker development logs"
-	@echo "  make docker-logs-frontend - View Docker frontend logs"
-	@echo "  make docker-logs-gateway - View Docker gateway logs"
+	@echo "Podman Development Commands:"
+	@echo "  make podman-init     - Pull the sandbox image"
+	@echo "  make podman-start    - Start Podman services (mode-aware from config.yaml, localhost:2026)"
+	@echo "  make podman-stop     - Stop Podman development services"
+	@echo "  make podman-logs     - View Podman development logs"
+	@echo "  make podman-logs-frontend - View Podman frontend logs"
+	@echo "  make podman-logs-gateway - View Podman gateway logs"
+	@echo ""
+	@echo "Compatibility aliases (still available): make docker-*"
 
 config:
 	@$(PYTHON) ./scripts/configure.py
@@ -59,11 +61,11 @@ install:
 	@echo "  Optional: Pre-pull Sandbox Image"
 	@echo "=========================================="
 	@echo ""
-	@echo "If you plan to use Docker/Container-based sandbox, you can pre-pull the image:"
+	@echo "If you plan to use Podman/Container-based sandbox, you can pre-pull the image:"
 	@echo "  make setup-sandbox"
 	@echo ""
 
-# Pre-pull sandbox Docker image (optional but recommended)
+# Pre-pull sandbox Podman image (optional but recommended)
 setup-sandbox:
 	@echo "=========================================="
 	@echo "  Pre-pulling Sandbox Container Image"
@@ -79,11 +81,11 @@ setup-sandbox:
 	echo ""; \
 	if command -v container >/dev/null 2>&1 && [ "$$(uname)" = "Darwin" ]; then \
 		echo "Detected Apple Container on macOS, pulling image..."; \
-		container pull "$$IMAGE" || echo "⚠ Apple Container pull failed, will try Docker"; \
+		container pull "$$IMAGE" || echo "⚠ Apple Container pull failed, will try Podman"; \
 	fi; \
-	if command -v docker >/dev/null 2>&1; then \
-		echo "Pulling image using Docker..."; \
-		if docker pull "$$IMAGE"; then \
+	if command -v podman >/dev/null 2>&1; then \
+		echo "Pulling image using Podman..."; \
+		if podman pull "$$IMAGE"; then \
 			echo ""; \
 			echo "✓ Sandbox image pulled successfully"; \
 		else \
@@ -91,8 +93,8 @@ setup-sandbox:
 			echo "⚠ Failed to pull sandbox image (this is OK for local sandbox mode)"; \
 		fi; \
 	else \
-		echo "✗ Neither Docker nor Apple Container is available"; \
-		echo "  Please install Docker: https://docs.docker.com/get-docker/"; \
+		echo "✗ Neither Podman nor Apple Container is available"; \
+		echo "  Please install Podman: https://podman.io/docs/installation"; \
 		exit 1; \
 	fi
 
@@ -148,33 +150,41 @@ clean: stop
 	@echo "✓ Cleanup complete"
 
 # ==========================================
-# Docker Development Commands
+# Podman Development Commands
 # ==========================================
 
-# Initialize Docker containers and install dependencies
-docker-init:
+# Initialize Podman containers and install dependencies
+podman-init:
 	@./scripts/docker.sh init
 
-# Start Docker development environment
-docker-start:
+# Start Podman development environment
+podman-start:
 	@./scripts/docker.sh start
 
-# Stop Docker development environment
-docker-stop:
+# Stop Podman development environment
+podman-stop:
 	@./scripts/docker.sh stop
 
-# View Docker development logs
-docker-logs:
+# View Podman development logs
+podman-logs:
 	@./scripts/docker.sh logs
 
-# View Docker development logs
-docker-logs-frontend:
+# View Podman development logs
+podman-logs-frontend:
 	@./scripts/docker.sh logs --frontend
-docker-logs-gateway:
+podman-logs-gateway:
 	@./scripts/docker.sh logs --gateway
 
+# Backward-compatible aliases
+docker-init: podman-init
+docker-start: podman-start
+docker-stop: podman-stop
+docker-logs: podman-logs
+docker-logs-frontend: podman-logs-frontend
+docker-logs-gateway: podman-logs-gateway
+
 # ==========================================
-# Production Docker Commands
+# Production Podman Commands
 # ==========================================
 
 # Build and start production services

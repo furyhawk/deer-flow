@@ -133,7 +133,7 @@ def main() -> int:
         print("  FAIL nginx not found")
         print("    macOS:   brew install nginx")
         print("    Ubuntu:  sudo apt install nginx")
-        print("    Windows: use WSL for local mode or use Docker mode")
+        print("    Windows: use WSL for local mode or use Podman mode")
         print("    Or visit: https://nginx.org/en/download.html")
         failed = True
 

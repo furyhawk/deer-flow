@@ -16,7 +16,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 DOCKER_DIR="$REPO_ROOT/docker"
-COMPOSE_CMD=(docker compose -p deer-flow -f "$DOCKER_DIR/docker-compose.yaml")
+if command -v podman >/dev/null 2>&1 && podman compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(podman compose -p deer-flow -f "$DOCKER_DIR/docker-compose.yaml")
+elif command -v podman-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(podman-compose -p deer-flow -f "$DOCKER_DIR/docker-compose.yaml")
+else
+    echo "✗ Podman compose is required but not found."
+    exit 1
+fi
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 
@@ -138,12 +145,12 @@ detect_sandbox_mode() {
 # ── down ──────────────────────────────────────────────────────────────────────
 
 if [ "$CMD" = "down" ]; then
-    # Set minimal env var defaults so docker compose can parse the file without
+    # Set minimal env var defaults so podman compose can parse the file without
     # warning about unset variables that appear in volume specs.
     export DEER_FLOW_HOME="${DEER_FLOW_HOME:-$REPO_ROOT/backend/.deer-flow}"
     export DEER_FLOW_CONFIG_PATH="${DEER_FLOW_CONFIG_PATH:-$DEER_FLOW_HOME/config.yaml}"
     export DEER_FLOW_EXTENSIONS_CONFIG_PATH="${DEER_FLOW_EXTENSIONS_CONFIG_PATH:-$DEER_FLOW_HOME/extensions_config.json}"
-    export DEER_FLOW_DOCKER_SOCKET="${DEER_FLOW_DOCKER_SOCKET:-/var/run/docker.sock}"
+    export DEER_FLOW_DOCKER_SOCKET="${DEER_FLOW_DOCKER_SOCKET:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock}"
     export DEER_FLOW_REPO_ROOT="${DEER_FLOW_REPO_ROOT:-$REPO_ROOT}"
     export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-placeholder}"
     "${COMPOSE_CMD[@]}" down
@@ -174,16 +181,16 @@ fi
 # ── DEER_FLOW_DOCKER_SOCKET ───────────────────────────────────────────────────
 
 if [ -z "$DEER_FLOW_DOCKER_SOCKET" ]; then
-    export DEER_FLOW_DOCKER_SOCKET="/var/run/docker.sock"
+    export DEER_FLOW_DOCKER_SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
 fi
 
 if [ "$sandbox_mode" != "local" ]; then
     if [ ! -S "$DEER_FLOW_DOCKER_SOCKET" ]; then
-        echo -e "${RED}⚠ Docker socket not found at $DEER_FLOW_DOCKER_SOCKET${NC}"
+        echo -e "${RED}⚠ Podman socket not found at $DEER_FLOW_DOCKER_SOCKET${NC}"
         echo "  AioSandboxProvider (DooD) will not work."
         exit 1
     else
-        echo -e "${GREEN}✓ Docker socket: $DEER_FLOW_DOCKER_SOCKET${NC}"
+        echo -e "${GREEN}✓ Podman socket: $DEER_FLOW_DOCKER_SOCKET${NC}"
     fi
 fi
 
@@ -208,5 +215,5 @@ echo "  🤖 LangGraph:   http://localhost:${PORT:-2026}/api/langgraph/*"
 echo ""
 echo "  Manage:"
 echo "    make down        — stop and remove containers"
-echo "    make docker-logs — view logs"
+echo "    make podman-logs — view logs"
 echo ""
